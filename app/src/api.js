@@ -17,6 +17,7 @@ async function request(url, options = {}) {
   }
 }
 
+// Calls that need a logged-in user
 export async function api(path, options = {}) {
   const token = await auth.currentUser.getIdToken();
   return request(`${SERVER_URL}/api${path}`, {
@@ -25,6 +26,16 @@ export async function api(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 }
+
+// Public calls (used before the account exists)
+export const getColleges = () => request(`${SERVER_URL}/api/colleges`);
+
+export const signupCheck = (body) =>
+  request(`${SERVER_URL}/api/signup-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 
 export const usernameAvailable = (name) =>
   request(`${SERVER_URL}/api/username-available?u=${encodeURIComponent(name)}`);

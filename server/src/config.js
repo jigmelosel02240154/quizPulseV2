@@ -11,6 +11,9 @@ module.exports = {
   MAX_QUESTIONS: 15,
   MAX_PLAYERS: 8,
   TZ_OFFSET_HOURS: num(process.env.TZ_OFFSET_HOURS, 6),
+  // true  = a campus is only granted after the user verifies their college email (secure)
+  // false = the email format alone is enough (easier for demos and testing)
+  REQUIRE_VERIFIED_EMAIL: process.env.REQUIRE_VERIFIED_EMAIL === 'true',
   SUBJECTS: ['IT', 'Math', 'General Knowledge'],
   DIFFICULTIES: ['easy', 'medium', 'hard'],
   AVATARS: ['🦊', '🐼', '🦁', '🐯', '🐸', '🐙', '🦉', '🐧', '🦄', '🐲'],

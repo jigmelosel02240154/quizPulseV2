@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Alert, StyleSheet } from 'react-native';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth';
 import { auth } from '../firebase';
-import { api, usernameAvailable } from '../api';
-import { Button } from '../components/UI';
+import { api, getColleges, signupCheck } from '../api';
+import { Button, Chip } from '../components/UI';
 import { colors, AVATARS } from '../theme';
 
 export default function AuthScreen() {
@@ -12,7 +12,18 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [avatar, setAvatar] = useState(AVATARS[0]);
+  const [campus, setCampus] = useState('');          // '' = no campus
+  const [colleges, setColleges] = useState([]);
+  const [requireVerified, setRequireVerified] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getColleges()
+      .then((r) => { setColleges(r.colleges || []); setRequireVerified(!!r.requireVerifiedEmail); })
+      .catch(() => {});
+  }, []);
+
+  const selected = colleges.find((c) => c.id === campus);
 
   const friendly = (e) => {
     const c = e.code || '';
@@ -29,14 +40,22 @@ export default function AuthScreen() {
     setBusy(true);
     try {
       if (mode === 'register') {
-        const check = await usernameAvailable(username.trim());
-        if (!check.available) throw new Error(check.reason || 'That username is taken.');
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const name = username.trim();
+        const mail = email.trim();
+        // Check username + college email BEFORE creating the account
+        const check = await signupCheck({ username: name, email: mail, campus: campus || null });
+        if (!check.ok) throw new Error(check.error);
+
+        const cred = await createUserWithEmailAndPassword(auth, mail, password);
         try {
-          await api('/profile', { method: 'POST', body: { username: username.trim(), campus: 'CST', avatar } });
+          await api('/profile', { method: 'POST', body: { username: name, campus: campus || null, avatar } });
         } catch (e) {
           await cred.user.delete(); // don't leave an account without a profile
           throw e;
+        }
+        if (requireVerified) {
+          try { await sendEmailVerification(cred.user); } catch {}
+          if (campus) Alert.alert('Verify your email', 'We sent you a verification link. After verifying, open Profile and choose your campus.');
         }
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -58,7 +77,7 @@ export default function AuthScreen() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={s.container} keyboardShouldPersistTaps="handled">
         <Text style={s.logo}>⚡ QuizPulse</Text>
-        <Text style={s.tag}>Real-time quiz battles for CST students</Text>
+        <Text style={s.tag}>Real-time quiz battles for college students</Text>
 
         {mode === 'register' && (
           <>
@@ -70,6 +89,17 @@ export default function AuthScreen() {
               ))}
             </View>
             <TextInput style={s.input} placeholder="Username (3-20 letters/numbers)" placeholderTextColor={colors.muted} value={username} onChangeText={setUsername} autoCapitalize="none" />
+
+            <Text style={s.label}>Campus (optional)</Text>
+            <View style={s.chips}>
+              <Chip label="None" on={campus === ''} onPress={() => setCampus('')} />
+              {colleges.map((c) => <Chip key={c.id} label={c.id} on={campus === c.id} onPress={() => setCampus(c.id)} />)}
+            </View>
+            <Text style={s.hint}>
+              {selected
+                ? `${selected.name}: register with your college email, ending ${selected.emailHint}`
+                : 'You can join a campus later from your Profile using your college email.'}
+            </Text>
           </>
         )}
         <TextInput style={s.input} placeholder="Email" placeholderTextColor={colors.muted} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
@@ -90,6 +120,9 @@ const s = StyleSheet.create({
   logo: { fontSize: 38, fontWeight: '800', color: colors.primary, textAlign: 'center' },
   tag: { color: colors.muted, textAlign: 'center', marginBottom: 28, marginTop: 4 },
   input: { backgroundColor: colors.card, color: colors.text, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border },
+  label: { color: colors.muted, marginBottom: 8, marginTop: 4 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap' },
+  hint: { color: colors.muted, fontSize: 13, marginBottom: 14 },
   link: { color: colors.muted, textAlign: 'center', marginTop: 12 },
   avatars: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: 14 },
   avatar: { padding: 8, margin: 4, borderRadius: 14, borderWidth: 2, borderColor: 'transparent', backgroundColor: colors.card },

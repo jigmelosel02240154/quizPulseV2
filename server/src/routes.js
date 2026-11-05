@@ -3,6 +3,7 @@ const rateLimit = require('express-rate-limit');
 const { admin, db } = require('./firebase');
 const { recordResult } = require('./stats');
 const { sampleQuestions } = require('./questions');
+const colleges = require('./colleges');
 const C = require('./config');
 
 router.use(rateLimit({ windowMs: 60_000, limit: 120, standardHeaders: true, legacyHeaders: false }));
@@ -11,11 +12,31 @@ const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // ---------- Public ----------
+router.get('/colleges', (req, res) => {
+  res.json({ colleges: colleges.publicList(), requireVerifiedEmail: C.REQUIRE_VERIFIED_EMAIL });
+});
+
 router.get('/username-available', wrap(async (req, res) => {
   const u = String(req.query.u || '').toLowerCase();
   if (!USERNAME_RE.test(u)) return res.json({ available: false, reason: 'Use 3-20 letters, numbers or _' });
   const snap = await db.collection('users').where('usernameLower', '==', u).limit(1).get();
   res.json({ available: snap.empty });
+}));
+
+// Pre-flight check used by the register screen BEFORE the account is created
+router.post('/signup-check', wrap(async (req, res) => {
+  const { username, email, campus } = req.body || {};
+  if (!USERNAME_RE.test(username || '')) return res.json({ ok: false, error: 'Username must be 3-20 letters, numbers or _' });
+  const snap = await db.collection('users').where('usernameLower', '==', username.toLowerCase()).limit(1).get();
+  if (!snap.empty) return res.json({ ok: false, error: 'That username is already taken' });
+  if (campus) {
+    const college = colleges.getCollege(campus);
+    if (!college) return res.json({ ok: false, error: 'Unknown college' });
+    if (!colleges.emailMatches(email, college)) {
+      return res.json({ ok: false, error: `To join ${college.id} you must register with your college email (ending ${colleges.emailHint(college)}). Choose "None" to register without a campus.` });
+    }
+  }
+  res.json({ ok: true });
 }));
 
 // ---------- Auth required below ----------
@@ -24,6 +45,8 @@ router.use(wrap(async (req, res, next) => {
     const token = (req.headers.authorization || '').replace('Bearer ', '');
     const decoded = await admin.auth().verifyIdToken(token);
     req.uid = decoded.uid;
+    req.email = decoded.email || '';
+    req.emailVerified = decoded.email_verified === true;
     req.isAdmin = decoded.admin === true;
     next();
   } catch {
@@ -31,39 +54,55 @@ router.use(wrap(async (req, res, next) => {
   }
 }));
 
+const campusCheck = (req, campusId) =>
+  colleges.checkCampus({ email: req.email, emailVerified: req.emailVerified }, campusId, C.REQUIRE_VERIFIED_EMAIL);
+
 router.post('/profile', wrap(async (req, res) => {
-  const { username, campus = 'CST', avatar = C.AVATARS[0] } = req.body || {};
+  const { username, campus = null, avatar = C.AVATARS[0] } = req.body || {};
   if (!USERNAME_RE.test(username || '')) return res.status(400).json({ error: 'Username must be 3-20 letters, numbers or _' });
   if (!C.AVATARS.includes(avatar)) return res.status(400).json({ error: 'Invalid avatar' });
   const lower = username.toLowerCase();
   const taken = await db.collection('users').where('usernameLower', '==', lower).limit(1).get();
   if (!taken.empty && taken.docs[0].id !== req.uid) return res.status(409).json({ error: 'Username already taken' });
-  await db.collection('users').doc(req.uid).set(
-    { username, usernameLower: lower, campus: String(campus).slice(0, 20), avatar, createdAt: new Date() },
-    { merge: true });
-  res.json({ ok: true });
-}));
 
-router.patch('/profile', wrap(async (req, res) => {
-  const { avatar, username } = req.body || {};
-  const update = {};
-
-  if (avatar !== undefined) {
-    if (!C.AVATARS.includes(avatar)) return res.status(400).json({ error: 'Invalid avatar' });
-    update.avatar = avatar;
+  const check = campusCheck(req, campus || null);
+  let campusPending = false;
+  if (!check.ok) {
+    if (check.code === 'verify_email') campusPending = true; // create the profile, campus comes after verification
+    else return res.status(check.status).json({ error: check.error });
   }
 
-  if (username !== undefined) {
-    if (!USERNAME_RE.test(username)) return res.status(400).json({ error: 'Username must be 3-20 letters, numbers or _' });
-    const lower = username.toLowerCase();
+  await db.collection('users').doc(req.uid).set(
+    { username, usernameLower: lower, avatar, campus: check.ok ? check.campus : null, createdAt: new Date() },
+    { merge: true });
+  res.json({ ok: true, campusPending });
+}));
+
+// Change avatar, username and/or campus. Only the fields that are sent are changed.
+router.patch('/profile', wrap(async (req, res) => {
+  const body = req.body || {};
+  const update = {};
+  const existing = (await db.collection('users').doc(req.uid).get()).data() || {};
+
+  if (body.avatar !== undefined) {
+    if (!C.AVATARS.includes(body.avatar)) return res.status(400).json({ error: 'Invalid avatar' });
+    update.avatar = body.avatar;
+  }
+
+  if (body.username !== undefined) {
+    if (!USERNAME_RE.test(body.username)) return res.status(400).json({ error: 'Username must be 3-20 letters, numbers or _' });
+    const lower = body.username.toLowerCase();
     const taken = await db.collection('users').where('usernameLower', '==', lower).limit(1).get();
     if (!taken.empty && taken.docs[0].id !== req.uid) return res.status(409).json({ error: 'Username already taken' });
-    update.username = username;
+    update.username = body.username;
     update.usernameLower = lower;
-    // repairs accounts that were created without a full profile
-    const existing = (await db.collection('users').doc(req.uid).get()).data() || {};
-    if (!existing.campus) update.campus = 'CST';
-    if (!existing.avatar && !update.avatar) update.avatar = C.AVATARS[0];
+    if (!existing.avatar && update.avatar === undefined) update.avatar = C.AVATARS[0]; // repairs incomplete profiles
+  }
+
+  if ('campus' in body) {
+    const check = campusCheck(req, body.campus || null);
+    if (!check.ok) return res.status(check.status).json({ error: check.error, code: check.code });
+    update.campus = check.campus; // null = leave campus
   }
 
   if (!Object.keys(update).length) return res.status(400).json({ error: 'Nothing to update' });
@@ -72,8 +111,23 @@ router.patch('/profile', wrap(async (req, res) => {
 }));
 
 router.get('/me', wrap(async (req, res) => {
-  const snap = await db.collection('users').doc(req.uid).get();
-  res.json({ uid: req.uid, badges: [], subjects: {}, ...(snap.data() || {}) });
+  const ref = db.collection('users').doc(req.uid);
+  const data = (await ref.get()).data() || {};
+
+  // Self-heal: drop a campus the user's email does not qualify for (e.g. accounts made before campus rules existed)
+  if (data.campus && !colleges.emailMatches(req.email, colleges.getCollege(data.campus))) {
+    data.campus = null;
+    await ref.set({ campus: null }, { merge: true });
+  }
+
+  res.json({
+    uid: req.uid, badges: [], subjects: {}, ...data,
+    email: req.email,
+    campusName: colleges.getCollege(data.campus)?.name || null,
+    eligibleColleges: colleges.eligibleColleges(req.email).map((c) => ({ id: c.id, name: c.name })),
+    colleges: colleges.publicList(),
+    requireVerifiedEmail: C.REQUIRE_VERIFIED_EMAIL,
+  });
 }));
 
 // Single-player questions. (Answers are included: practice mode isn't competitive.)
@@ -104,11 +158,13 @@ router.post('/singleplayer/result', wrap(async (req, res) => {
   res.json({ ok: true, newBadges });
 }));
 
+// Global leaderboard, or one college's leaderboard with ?campus=CST (no Firestore index needed)
 router.get('/leaderboard', wrap(async (req, res) => {
+  const campus = req.query.campus ? String(req.query.campus) : null;
   let rows;
-  if (req.query.campus) {
-    // Filter only (no index needed), then sort here
-    const snap = await db.collection('users').where('campus', '==', String(req.query.campus)).limit(500).get();
+  if (campus) {
+    if (!colleges.getCollege(campus)) return res.status(400).json({ error: 'Unknown college' });
+    const snap = await db.collection('users').where('campus', '==', campus).limit(500).get();
     rows = snap.docs.map((d) => ({ uid: d.id, ...d.data() }))
       .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
       .slice(0, 25);
@@ -117,7 +173,7 @@ router.get('/leaderboard', wrap(async (req, res) => {
     rows = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
   }
   res.json(rows.map((u) => ({
-    uid: u.uid, username: u.username, avatar: u.avatar,
+    uid: u.uid, username: u.username, avatar: u.avatar, campus: u.campus || null,
     totalScore: u.totalScore || 0, wins: u.wins || 0,
   })));
 }));
