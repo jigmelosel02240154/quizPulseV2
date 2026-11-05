@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: quizpulse-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: TZ_OFFSET_HOURS
+        value: "6"

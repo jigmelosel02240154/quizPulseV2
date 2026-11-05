@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Secrets: NEVER commit these
+.env
+.env.*
+!.env.example
+serviceAccountKey*.json
+*-firebase-adminsdk-*.json
+
+# Expo / React Native
+.expo/
+.expo-shared/
+dist/
+web-build/
+*.apk
+*.aab
+*.ipa
+
+# Logs and OS files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
