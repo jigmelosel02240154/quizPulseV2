@@ -20,9 +20,19 @@ export default function SinglePlayerScreen({ route, navigation }) {
   const chooseRef = useRef();
 
   useEffect(() => {
+    let cancelled = false;
+    const leave = (title, msg) => {
+      if (cancelled) return;
+      Alert.alert(title, msg);
+      if (navigation.canGoBack()) navigation.goBack();
+    };
     api(`/questions?subject=${encodeURIComponent(subject)}&difficulty=${difficulty}&limit=10`)
-      .then((data) => (data.length ? setQs(data) : (Alert.alert('No questions', 'Nothing found for this selection.'), navigation.goBack())))
-      .catch((e) => { Alert.alert('Error', e.message); navigation.goBack(); });
+      .then((data) => {
+        if (cancelled) return;
+        data.length ? setQs(data) : leave('No questions', 'Nothing found for this selection.');
+      })
+      .catch((e) => leave('Could not load questions', e.message));
+    return () => { cancelled = true; };
   }, []);
 
   // Countdown for the current question

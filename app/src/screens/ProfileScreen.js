@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
@@ -10,21 +10,53 @@ import { colors, AVATARS, BADGES } from '../theme';
 
 export default function ProfileScreen() {
   const [me, setMe] = useState({});
-  useFocusEffect(useCallback(() => { api('/me').then(setMe).catch(() => {}); }, []));
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useFocusEffect(useCallback(() => {
+    api('/me').then((m) => { setMe(m); setName(m.username || ''); }).catch(() => {});
+  }, []));
 
   const pick = async (avatar) => {
     setMe((m) => ({ ...m, avatar }));
     try { await api('/profile', { method: 'PATCH', body: { avatar } }); } catch {}
   };
+
+  const saveName = async () => {
+    setSaving(true);
+    try {
+      await api('/profile', { method: 'PATCH', body: { username: name.trim() } });
+      setMe((m) => ({ ...m, username: name.trim() }));
+      Alert.alert('Saved', 'Your username has been updated.');
+    } catch (e) {
+      Alert.alert('Could not save', e.message);
+    }
+    setSaving(false);
+  };
+
   const logout = () => { closeSocket(); signOut(auth); };
 
   return (
-    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       <Card style={{ alignItems: 'center' }}>
         <Text style={{ fontSize: 56 }}>{me.avatar || '🦊'}</Text>
-        <Text style={ui.h1}>{me.username}</Text>
+        <Text style={ui.h1}>{me.username || 'Set your username below'}</Text>
         <Text style={ui.muted}>{auth.currentUser?.email}</Text>
         <Text style={[ui.muted, { marginTop: 2 }]}>{me.campus || 'CST'} campus</Text>
+      </Card>
+
+      <Card>
+        <Text style={ui.h2}>Username</Text>
+        <TextInput
+          style={s.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="3-20 letters, numbers or _"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          maxLength={20}
+        />
+        <Button title={saving ? 'Saving...' : 'Save username'} onPress={saveName} disabled={saving || name.trim().length < 3} style={{ marginBottom: 0 }} />
       </Card>
 
       <Card>
@@ -57,6 +89,7 @@ export default function ProfileScreen() {
 }
 
 const s = StyleSheet.create({
+  input: { backgroundColor: colors.card2, color: colors.text, borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 16 },
   avatars: { flexDirection: 'row', flexWrap: 'wrap' },
   avatar: { padding: 8, margin: 4, borderRadius: 14, borderWidth: 2, borderColor: 'transparent', backgroundColor: colors.card2 },
   badge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8 },

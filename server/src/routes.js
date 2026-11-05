@@ -45,9 +45,29 @@ router.post('/profile', wrap(async (req, res) => {
 }));
 
 router.patch('/profile', wrap(async (req, res) => {
-  const { avatar } = req.body || {};
-  if (!C.AVATARS.includes(avatar)) return res.status(400).json({ error: 'Invalid avatar' });
-  await db.collection('users').doc(req.uid).set({ avatar }, { merge: true });
+  const { avatar, username } = req.body || {};
+  const update = {};
+
+  if (avatar !== undefined) {
+    if (!C.AVATARS.includes(avatar)) return res.status(400).json({ error: 'Invalid avatar' });
+    update.avatar = avatar;
+  }
+
+  if (username !== undefined) {
+    if (!USERNAME_RE.test(username)) return res.status(400).json({ error: 'Username must be 3-20 letters, numbers or _' });
+    const lower = username.toLowerCase();
+    const taken = await db.collection('users').where('usernameLower', '==', lower).limit(1).get();
+    if (!taken.empty && taken.docs[0].id !== req.uid) return res.status(409).json({ error: 'Username already taken' });
+    update.username = username;
+    update.usernameLower = lower;
+    // repairs accounts that were created without a full profile
+    const existing = (await db.collection('users').doc(req.uid).get()).data() || {};
+    if (!existing.campus) update.campus = 'CST';
+    if (!existing.avatar && !update.avatar) update.avatar = C.AVATARS[0];
+  }
+
+  if (!Object.keys(update).length) return res.status(400).json({ error: 'Nothing to update' });
+  await db.collection('users').doc(req.uid).set(update, { merge: true });
   res.json({ ok: true });
 }));
 
@@ -85,13 +105,21 @@ router.post('/singleplayer/result', wrap(async (req, res) => {
 }));
 
 router.get('/leaderboard', wrap(async (req, res) => {
-  let q = db.collection('users');
-  if (req.query.campus) q = q.where('campus', '==', String(req.query.campus));
-  const snap = await q.orderBy('totalScore', 'desc').limit(25).get();
-  res.json(snap.docs.map((d) => {
-    const u = d.data();
-    return { uid: d.id, username: u.username, avatar: u.avatar, totalScore: u.totalScore || 0, wins: u.wins || 0 };
-  }));
+  let rows;
+  if (req.query.campus) {
+    // Filter only (no index needed), then sort here
+    const snap = await db.collection('users').where('campus', '==', String(req.query.campus)).limit(500).get();
+    rows = snap.docs.map((d) => ({ uid: d.id, ...d.data() }))
+      .sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0))
+      .slice(0, 25);
+  } else {
+    const snap = await db.collection('users').orderBy('totalScore', 'desc').limit(25).get();
+    rows = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
+  }
+  res.json(rows.map((u) => ({
+    uid: u.uid, username: u.username, avatar: u.avatar,
+    totalScore: u.totalScore || 0, wins: u.wins || 0,
+  })));
 }));
 
 // ---------- Admin (custom claim admin=true; see scripts/make-admin.js) ----------
