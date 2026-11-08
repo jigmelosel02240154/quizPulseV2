@@ -15,6 +15,8 @@ import SinglePlayerScreen from './src/screens/SinglePlayerScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import LeaderboardScreen from './src/screens/LeaderboardScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import AdminQuestionsScreen from './src/screens/AdminQuestionsScreen';
+import QuestionEditScreen from './src/screens/QuestionEditScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -57,6 +59,8 @@ export default function App() {
             <Stack.Screen name="Main" component={Tabs} options={{ headerShown: false }} />
             <Stack.Screen name="Room" component={RoomScreen} options={{ title: 'Battle Arena' }} />
             <Stack.Screen name="Practice" component={SinglePlayerScreen} options={{ title: 'Practice' }} />
+            <Stack.Screen name="AdminQuestions" component={AdminQuestionsScreen} options={{ title: 'Manage questions' }} />
+            <Stack.Screen name="QuestionEdit" component={QuestionEditScreen} options={{ title: 'Question' }} />
           </>
         ) : (
           <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />

@@ -8,7 +8,7 @@ import { closeSocket } from '../socket';
 import { Button, Card, ui } from '../components/UI';
 import { colors, AVATARS, BADGES } from '../theme';
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const [me, setMe] = useState({});
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState('');
@@ -160,6 +160,13 @@ export default function ProfileScreen() {
           </View>
         )}
       </Card>
+
+      {me.isAdmin && (
+        <Card>
+          <Text style={ui.h2}>Admin</Text>
+          <Button title="Manage questions" onPress={() => navigation.navigate('AdminQuestions')} style={{ marginBottom: 0 }} />
+        </Card>
+      )}
 
       <Card>
         <Text style={ui.h2}>Choose avatar</Text>

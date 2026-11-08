@@ -127,6 +127,7 @@ router.get('/me', wrap(async (req, res) => {
     eligibleColleges: colleges.eligibleColleges(req.email).map((c) => ({ id: c.id, name: c.name })),
     colleges: colleges.publicList(),
     requireVerifiedEmail: C.REQUIRE_VERIFIED_EMAIL,
+    isAdmin: req.isAdmin,
   });
 }));
 
