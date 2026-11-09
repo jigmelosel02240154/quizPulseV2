@@ -2,10 +2,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, ScrollView, StyleSheet } from 'react-native';
 import { api, getColleges } from '../api';
 import { auth } from '../firebase';
-import { Chip, ui } from '../components/UI';
-import { colors } from '../theme';
+import { Chip, useUI } from '../components/UI';
+import { useTheme, useStyles } from '../ThemeContext';
 
 export default function LeaderboardScreen() {
+  const { colors } = useTheme();
+  const ui = useUI();
+  const s = useStyles(makeStyles);
   const [colleges, setColleges] = useState([]);
   const [selected, setSelected] = useState(null);   // null = Global, otherwise a college id
   const [rows, setRows] = useState([]);
@@ -53,7 +56,7 @@ export default function LeaderboardScreen() {
   );
 }
 
-const s = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, backgroundColor: colors.card, marginBottom: 8 },
-  me: { borderWidth: 1, borderColor: colors.primary },
+const makeStyles = (colors) => StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, backgroundColor: colors.card, marginBottom: 8, borderWidth: 1, borderColor: 'transparent' },
+  me: { borderColor: colors.primary },
 });

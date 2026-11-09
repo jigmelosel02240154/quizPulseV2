@@ -5,10 +5,16 @@ import { signOut, sendEmailVerification } from 'firebase/auth';
 import { auth } from '../firebase';
 import { api } from '../api';
 import { closeSocket } from '../socket';
-import { Button, Card, ui } from '../components/UI';
-import { colors, AVATARS, BADGES } from '../theme';
+import { Button, Card, Chip, useUI } from '../components/UI';
+import { useTheme, useStyles } from '../ThemeContext';
+import { AVATARS, BADGES } from '../theme';
+
+const THEME_OPTIONS = [['system', 'System'], ['light', 'Light'], ['dark', 'Dark']];
 
 export default function ProfileScreen({ navigation }) {
+  const { colors, mode, setMode } = useTheme();
+  const ui = useUI();
+  const s = useStyles(makeStyles);
   const [me, setMe] = useState({});
   const [editingName, setEditingName] = useState(false);
   const [name, setName] = useState('');
@@ -109,7 +115,7 @@ export default function ProfileScreen({ navigation }) {
         {needsName && <Text style={[ui.muted, { marginBottom: 8 }]}>Choose a username to finish setting up your profile.</Text>}
         {editingName || needsName ? (
           <>
-            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="3-20 letters, numbers or _" placeholderTextColor={colors.muted} autoCapitalize="none" maxLength={20} />
+            <TextInput style={s.input} value={name} onChangeText={setName} placeholder="3-20 letters, numbers or _" placeholderTextColor={colors.muted} autoCapitalize="none" autoCorrect={false} maxLength={20} />
             <Button title={busy ? 'Saving...' : 'Save'} onPress={saveName} disabled={busy || name.trim().length < 3} style={{ marginBottom: 8 }} />
             {!needsName && <Button title="Cancel" variant="ghost" onPress={() => setEditingName(false)} style={{ marginBottom: 0 }} />}
           </>
@@ -161,12 +167,22 @@ export default function ProfileScreen({ navigation }) {
         )}
       </Card>
 
+      {/* Admin (only visible to admin accounts) */}
       {me.isAdmin && (
         <Card>
           <Text style={ui.h2}>Admin</Text>
           <Button title="Manage questions" onPress={() => navigation.navigate('AdminQuestions')} style={{ marginBottom: 0 }} />
         </Card>
       )}
+
+      {/* Appearance */}
+      <Card>
+        <Text style={ui.h2}>Appearance</Text>
+        <View style={ui.row}>
+          {THEME_OPTIONS.map(([m, label]) => <Chip key={m} label={label} on={mode === m} onPress={() => setMode(m)} />)}
+        </View>
+        <Text style={ui.muted}>System follows your phone's light or dark setting.</Text>
+      </Card>
 
       <Card>
         <Text style={ui.h2}>Choose avatar</Text>
@@ -197,7 +213,7 @@ export default function ProfileScreen({ navigation }) {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   input: { backgroundColor: colors.card2, color: colors.text, borderRadius: 12, padding: 14, marginBottom: 12, fontSize: 16 },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   action: { color: colors.primary, fontWeight: '700' },

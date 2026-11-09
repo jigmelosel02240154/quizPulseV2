@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Share } from 'react-native';
 import { getSocket, measureLatency, closeSocket } from '../socket';
 import { auth } from '../firebase';
-import { Button, Card, ui } from '../components/UI';
-import { colors, BADGES } from '../theme';
+import { Button, Card, useUI } from '../components/UI';
+import { useTheme, useStyles } from '../ThemeContext';
+import { BADGES } from '../theme';
 
 const EVENTS = ['lobby_update', 'searching', 'match_start', 'question_start', 'score_update', 'question_end', 'match_end', 'badges_earned', 'match_error', 'resume', 'connect', 'disconnect'];
 
@@ -11,10 +12,14 @@ const EVENTS = ['lobby_update', 'searching', 'match_start', 'question_start', 's
 export default function RoomScreen({ route, navigation }) {
   const { mode, subject, difficulty, questionCount, code: joinCode } = route.params;
   const me = auth.currentUser.uid;
+  const { colors } = useTheme();
+  const ui = useUI();
+  const s = useStyles(makeStyles);
 
   const [phase, setPhase] = useState('connecting');
   const phaseRef = useRef('connecting');
   const go = (p) => { phaseRef.current = p; setPhase(p); };
+  const back = () => { if (navigation.canGoBack()) navigation.goBack(); };
 
   const [lobby, setLobby] = useState({ code: '', host: '', players: [] });
   const [question, setQuestion] = useState(null);
@@ -51,7 +56,7 @@ export default function RoomScreen({ route, navigation }) {
 
   useEffect(() => {
     let latencyTimer;
-    let s;
+    let sock;
     const handlers = {
       lobby_update: (l) => {
         setLobby(l); setScores(l.players);
@@ -64,7 +69,7 @@ export default function RoomScreen({ route, navigation }) {
       question_end: ({ correctIndex, scores }) => { stopCountdown(); setCorrectIndex(correctIndex); setScores(scores); },
       match_end: ({ ranking }) => { stopCountdown(); setRanking(ranking); go('ended'); },
       badges_earned: (b) => setNewBadges(b),
-      match_error: ({ message }) => { Alert.alert('Match cancelled', message); navigation.goBack(); },
+      match_error: ({ message }) => { Alert.alert('Match cancelled', message); back(); },
       // Sent by the server when we reconnect to a match that is still running
       resume: (r) => {
         setLobby(r); setScores(r.players);
@@ -75,36 +80,40 @@ export default function RoomScreen({ route, navigation }) {
       },
       connect: () => {
         setOnline(true);
-        if (phaseRef.current === 'searching') s.emit('quick_match', { subject, difficulty });
+        if (phaseRef.current === 'searching') sock.emit('quick_match', { subject, difficulty });
       },
       disconnect: () => setOnline(false),
     };
 
     (async () => {
       try {
-        s = await getSocket();
-        socketRef.current = s;
-        EVENTS.forEach((e) => s.on(e, handlers[e]));
-        const ping = () => measureLatency(s).then(setLatency);
+        sock = await getSocket();
+        socketRef.current = sock;
+        EVENTS.forEach((e) => sock.on(e, handlers[e]));
+        const ping = () => measureLatency(sock).then(setLatency);
         ping();
-        latencyTimer = setInterval(() => s.connected && ping(), 5000);
+        latencyTimer = setInterval(() => sock.connected && ping(), 5000);
 
-        if (mode === 'quick') s.emit('quick_match', { subject, difficulty });
-        if (mode === 'create') s.emit('create_room', { subject, difficulty, questionCount });
-        if (mode === 'join') s.emit('join_room', { code: joinCode }, (r) => {
-          if (r?.error) { Alert.alert('Cannot join', r.error); navigation.goBack(); }
+        if (mode === 'quick') sock.emit('quick_match', { subject, difficulty });
+        if (mode === 'create') sock.emit('create_room', { subject, difficulty, questionCount });
+        if (mode === 'join') sock.emit('join_room', { code: joinCode }, (r) => {
+          if (r?.error) { Alert.alert('Cannot join', r.error); back(); }
         });
       } catch (e) {
         closeSocket();
-        Alert.alert('Connection failed', e.message === 'profile_missing' ? 'Your profile is incomplete.' : 'Could not reach the game server.');
-        navigation.goBack();
+        const m = String(e?.message || e);
+        const text = m === 'profile_missing' ? 'Your profile is incomplete. Open Profile and set a username.'
+          : m === 'unauthorized' ? 'The server rejected your login. Check that the app and server use the same Firebase project, then log in again.'
+          : `Could not reach the game server (${m}). Check that the server is running and you are on the same Wi-Fi.`;
+        Alert.alert('Connection failed', text);
+        back();
       }
     })();
 
     return () => {
       clearInterval(latencyTimer);
       stopCountdown();
-      if (s) { s.emit('leave_room'); EVENTS.forEach((e) => s.off(e, handlers[e])); }
+      if (sock) { sock.emit('leave_room'); EVENTS.forEach((e) => sock.off(e, handlers[e])); }
     };
   }, []);
 
@@ -121,7 +130,7 @@ export default function RoomScreen({ route, navigation }) {
       <View style={[ui.screen, s.center]}>
         <ActivityIndicator size="large" color={colors.primary} />
         <Text style={[ui.text, { marginTop: 16 }]}>{phase === 'searching' ? 'Searching for an opponent...' : 'Connecting...'}</Text>
-        {phase === 'searching' && <Button title="Cancel" variant="ghost" style={{ marginTop: 24, width: 160 }} onPress={() => { socketRef.current?.emit('cancel_search'); navigation.goBack(); }} />}
+        {phase === 'searching' && <Button title="Cancel" variant="ghost" style={{ marginTop: 24, width: 160 }} onPress={() => { socketRef.current?.emit('cancel_search'); back(); }} />}
       </View>
     );
   }
@@ -164,7 +173,7 @@ export default function RoomScreen({ route, navigation }) {
           ))}
         </Card>
         {newBadges.map((b) => <Text key={b} style={{ color: colors.accent, marginBottom: 4 }}>New badge: {BADGES[b]?.icon} {BADGES[b]?.label}</Text>)}
-        <Button title="Back home" style={{ width: '100%', marginTop: 16 }} onPress={() => navigation.goBack()} />
+        <Button title="Back home" style={{ width: '100%', marginTop: 16 }} onPress={back} />
       </View>
     );
   }
@@ -190,11 +199,14 @@ export default function RoomScreen({ route, navigation }) {
       <Text style={s.question}>{question.text}</Text>
       {question.options.map((o, i) => {
         let bg = colors.card;
-        if (correctIndex !== null) { if (i === correctIndex) bg = colors.good; else if (i === picked) bg = colors.bad; }
-        else if (i === picked) bg = '#0369a1';
+        let fg = colors.text;
+        if (correctIndex !== null) {
+          if (i === correctIndex) { bg = colors.good; fg = '#fff'; }
+          else if (i === picked) { bg = colors.bad; fg = '#fff'; }
+        } else if (i === picked) bg = colors.picked;
         return (
           <TouchableOpacity key={i} style={[s.option, { backgroundColor: bg }]} onPress={() => answer(i)}>
-            <Text style={ui.text}>{o}</Text>
+            <Text style={[ui.text, { color: fg }]}>{o}</Text>
           </TouchableOpacity>
         );
       })}
@@ -202,7 +214,7 @@ export default function RoomScreen({ route, navigation }) {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   center: { justifyContent: 'center', alignItems: 'center' },
   code: { color: colors.primary, fontSize: 46, fontWeight: '800', letterSpacing: 6, marginVertical: 6 },
   offline: { backgroundColor: colors.bad, color: '#fff', textAlign: 'center', padding: 6, borderRadius: 8, marginBottom: 8, alignSelf: 'stretch' },

@@ -1,6 +1,6 @@
 // Local development (Expo Go): your computer's LAN IP, e.g. http://192.168.1.10:3000
 // APK builds: use your deployed HTTPS URL, e.g. https://quizpulse-server.onrender.com
-export const SERVER_URL = 'http://192.168.0.15:3000';
+export const SERVER_URL = 'http://10.140.128.103:3000';
 
 // Firebase Console > Project settings > General > Your apps > Web app
 export const firebaseConfig = {

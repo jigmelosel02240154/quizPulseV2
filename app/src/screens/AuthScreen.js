@@ -4,9 +4,12 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswor
 import { auth } from '../firebase';
 import { api, getColleges, signupCheck } from '../api';
 import { Button, Chip } from '../components/UI';
-import { colors, AVATARS } from '../theme';
+import { useTheme, useStyles } from '../ThemeContext';
+import { AVATARS } from '../theme';
 
 export default function AuthScreen() {
+  const { colors } = useTheme();
+  const s = useStyles(makeStyles);
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,8 +34,9 @@ export default function AuthScreen() {
     if (c.includes('email-already-in-use')) return 'That email is already registered.';
     if (c.includes('weak-password')) return 'Password must be at least 6 characters.';
     if (c.includes('invalid-email')) return 'Enter a valid email address.';
+    if (c.includes('too-many-requests')) return 'Too many attempts. Wait a few minutes and try again.';
     if (c.includes('network')) return 'Network error. Check your connection.';
-    return e.message || 'Something went wrong.';
+    return `${e.message || 'Something went wrong.'}${c ? ` (${c})` : ''}`;
   };
 
   const submit = async () => {
@@ -58,7 +62,11 @@ export default function AuthScreen() {
           if (campus) Alert.alert('Verify your email', 'We sent you a verification link. After verifying, open Profile and choose your campus.');
         }
       } else {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
+        await Promise.race([
+          signInWithEmailAndPassword(auth, email.trim(), password),
+          new Promise((_, reject) => setTimeout(() => reject(Object.assign(
+            new Error('Login timed out. Check your internet connection.'), { code: 'timeout' })), 15000)),
+        ]);
       }
     } catch (e) {
       Alert.alert(mode === 'login' ? 'Login failed' : 'Registration failed', friendly(e));
@@ -88,7 +96,7 @@ export default function AuthScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <TextInput style={s.input} placeholder="Username (3-20 letters/numbers)" placeholderTextColor={colors.muted} value={username} onChangeText={setUsername} autoCapitalize="none" />
+            <TextInput style={s.input} placeholder="Username (3-20 letters/numbers)" placeholderTextColor={colors.muted} value={username} onChangeText={setUsername} autoCapitalize="none" autoCorrect={false} />
 
             <Text style={s.label}>Campus (optional)</Text>
             <View style={s.chips}>
@@ -102,8 +110,8 @@ export default function AuthScreen() {
             </Text>
           </>
         )}
-        <TextInput style={s.input} placeholder="Email" placeholderTextColor={colors.muted} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-        <TextInput style={s.input} placeholder="Password" placeholderTextColor={colors.muted} value={password} onChangeText={setPassword} secureTextEntry />
+        <TextInput style={s.input} placeholder="Email" placeholderTextColor={colors.muted} value={email} onChangeText={setEmail} autoCapitalize="none" autoCorrect={false} keyboardType="email-address" />
+        <TextInput style={s.input} placeholder="Password" placeholderTextColor={colors.muted} value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoCorrect={false} />
 
         <Button title={busy ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Create account'} onPress={submit} disabled={busy} />
         {mode === 'login' && <TouchableOpacity onPress={reset}><Text style={s.link}>Forgot password?</Text></TouchableOpacity>}
@@ -115,7 +123,7 @@ export default function AuthScreen() {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   container: { flexGrow: 1, justifyContent: 'center', padding: 24 },
   logo: { fontSize: 38, fontWeight: '800', color: colors.primary, textAlign: 'center' },
   tag: { color: colors.muted, textAlign: 'center', marginBottom: 28, marginTop: 4 },

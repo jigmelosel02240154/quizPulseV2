@@ -2,19 +2,25 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, ScrollView, RefreshControl, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
-import { Card, ui } from '../components/UI';
-import { colors } from '../theme';
-
-const barColor = (pct) => (pct >= 75 ? colors.good : pct >= 50 ? colors.accent : colors.bad);
+import { Card, useUI } from '../components/UI';
+import { useTheme, useStyles } from '../ThemeContext';
 
 export default function StatsScreen() {
+  const { colors } = useTheme();
+  const ui = useUI();
+  const s = useStyles(makeStyles);
   const [me, setMe] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const load = useCallback(async () => { setRefreshing(true); try { setMe(await api('/me')); } catch {} setRefreshing(false); }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const barColor = (pct) => (pct >= 75 ? colors.good : pct >= 50 ? colors.accent : colors.bad);
   const subjects = Object.entries(me?.subjects || {});
   const accuracy = me?.totalAnswered ? Math.round((me.totalCorrect / me.totalAnswered) * 100) : 0;
+
+  const Stat = ({ label, value }) => (
+    <View style={s.stat}><Text style={s.statValue}>{value}</Text><Text style={ui.muted}>{label}</Text></View>
+  );
 
   return (
     <ScrollView style={{ backgroundColor: colors.bg }} contentContainerStyle={{ padding: 16 }}
@@ -45,11 +51,7 @@ export default function StatsScreen() {
   );
 }
 
-const Stat = ({ label, value }) => (
-  <View style={s.stat}><Text style={s.statValue}>{value}</Text><Text style={ui.muted}>{label}</Text></View>
-);
-
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   stat: { width: '31%', backgroundColor: colors.card, borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: colors.border },
   statValue: { color: colors.text, fontSize: 20, fontWeight: '800', marginBottom: 2 },

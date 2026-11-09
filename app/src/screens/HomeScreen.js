@@ -2,12 +2,16 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, TextInput, ScrollView, Alert, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
-import { Button, Card, Chip, ui } from '../components/UI';
-import { colors, SUBJECTS, DIFFICULTIES } from '../theme';
+import { Button, Card, Chip, useUI } from '../components/UI';
+import { useTheme, useStyles } from '../ThemeContext';
+import { SUBJECTS, DIFFICULTIES } from '../theme';
 
 const COUNTS = [5, 10, 15];
 
 export default function HomeScreen({ navigation }) {
+  const { colors } = useTheme();
+  const ui = useUI();
+  const s = useStyles(makeStyles);
   const [subject, setSubject] = useState('Mixed');
   const [difficulty, setDifficulty] = useState('any');
   const [count, setCount] = useState(5);
@@ -55,7 +59,7 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center' },
   joinRow: { flexDirection: 'row', alignItems: 'center' },
   input: { flex: 1, backgroundColor: colors.card2, color: colors.text, borderRadius: 12, padding: 14, fontSize: 18, letterSpacing: 3 },

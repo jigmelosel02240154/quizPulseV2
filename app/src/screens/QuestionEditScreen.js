@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { api } from '../api';
-import { Button, Card, Chip, ui } from '../components/UI';
-import { colors } from '../theme';
+import { Button, Card, Chip, useUI } from '../components/UI';
+import { useTheme, useStyles } from '../ThemeContext';
 
 const SUBJECTS = ['IT', 'Math', 'General Knowledge'];
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
@@ -10,6 +10,9 @@ const MAX_OPTIONS = 6;
 
 export default function QuestionEditScreen({ route, navigation }) {
   const q = route.params?.question; // undefined = adding a new question
+  const { colors } = useTheme();
+  const ui = useUI();
+  const s = useStyles(makeStyles);
   const [subject, setSubject] = useState(q?.subject || 'IT');
   const [difficulty, setDifficulty] = useState(q?.difficulty || 'easy');
   const [text, setText] = useState(q?.text || '');
@@ -63,7 +66,7 @@ export default function QuestionEditScreen({ route, navigation }) {
         {options.map((o, i) => (
           <View key={i} style={s.optRow}>
             <TouchableOpacity onPress={() => setCorrect(i)} style={[s.radio, correct === i && s.radioOn]}>
-              {correct === i && <Text style={{ color: colors.bg, fontWeight: '800' }}>✓</Text>}
+              {correct === i && <Text style={{ color: colors.onPrimary, fontWeight: '800' }}>✓</Text>}
             </TouchableOpacity>
             <TextInput style={[s.input, { flex: 1, marginBottom: 0 }]} value={o} onChangeText={(v) => setOption(i, v)}
               placeholder={`Option ${i + 1}`} placeholderTextColor={colors.muted} />
@@ -80,7 +83,7 @@ export default function QuestionEditScreen({ route, navigation }) {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   input: { backgroundColor: colors.card2, color: colors.text, borderRadius: 12, padding: 12, fontSize: 16 },
   optRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   radio: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 10 },

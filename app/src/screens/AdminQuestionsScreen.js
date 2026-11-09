@@ -2,12 +2,15 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, TextInput, FlatList, TouchableOpacity, Alert, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { api } from '../api';
-import { Button, Chip, ui } from '../components/UI';
-import { colors } from '../theme';
+import { Button, Chip, useUI } from '../components/UI';
+import { useTheme, useStyles } from '../ThemeContext';
 
 const FILTERS = ['All', 'IT', 'Math', 'General Knowledge'];
 
 export default function AdminQuestionsScreen({ navigation }) {
+  const { colors } = useTheme();
+  const ui = useUI();
+  const s = useStyles(makeStyles);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -78,7 +81,7 @@ export default function AdminQuestionsScreen({ navigation }) {
   );
 }
 
-const s = StyleSheet.create({
+const makeStyles = (colors) => StyleSheet.create({
   search: { backgroundColor: colors.card, color: colors.text, borderRadius: 12, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
   card: { backgroundColor: colors.card, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
   actions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },

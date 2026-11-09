@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './src/firebase';
-import { colors } from './src/theme';
+import { ThemeProvider, useTheme } from './src/ThemeContext';
 import { Loading } from './src/components/UI';
 import AuthScreen from './src/screens/AuthScreen';
 import HomeScreen from './src/screens/HomeScreen';
@@ -20,18 +20,15 @@ import QuestionEditScreen from './src/screens/QuestionEditScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
-
-const theme = {
-  ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: colors.bg, card: colors.card, text: colors.text, primary: colors.primary, border: colors.border },
-};
-const header = { headerStyle: { backgroundColor: colors.card }, headerTintColor: colors.text };
 const icons = { Home: 'game-controller', Analytics: 'stats-chart', Leaderboard: 'trophy', Profile: 'person' };
 
+const headerOptions = (colors) => ({ headerStyle: { backgroundColor: colors.card }, headerTintColor: colors.text });
+
 function Tabs() {
+  const { colors } = useTheme();
   return (
     <Tab.Navigator screenOptions={({ route }) => ({
-      ...header,
+      ...headerOptions(colors),
       tabBarStyle: { backgroundColor: colors.card, borderTopColor: colors.border },
       tabBarActiveTintColor: colors.primary,
       tabBarInactiveTintColor: colors.muted,
@@ -45,15 +42,23 @@ function Tabs() {
   );
 }
 
-export default function App() {
+function Root() {
+  const { colors, scheme } = useTheme();
   const [user, setUser] = useState(undefined);
   useEffect(() => onAuthStateChanged(auth, setUser), []);
+
+  const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
+  const navTheme = {
+    ...base,
+    colors: { ...base.colors, background: colors.bg, card: colors.card, text: colors.text, primary: colors.primary, border: colors.border },
+  };
+
   if (user === undefined) return <Loading />;
 
   return (
-    <NavigationContainer theme={theme}>
-      <StatusBar style="light" />
-      <Stack.Navigator screenOptions={header}>
+    <NavigationContainer theme={navTheme}>
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      <Stack.Navigator screenOptions={headerOptions(colors)}>
         {user ? (
           <>
             <Stack.Screen name="Main" component={Tabs} options={{ headerShown: false }} />
@@ -67,5 +72,13 @@ export default function App() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <Root />
+    </ThemeProvider>
   );
 }

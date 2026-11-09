@@ -14,7 +14,9 @@ A cross-platform mobile trivia app for CST students. Play real-time 1v1 and room
 - **Practice mode:** solo quizzes with subject and difficulty filters.
 - **Authentication:** Firebase Auth (email/password), with Firebase ID tokens (JWTs) verified by the Node server for both REST and Socket.io.
 - **Analytics dashboard:** accuracy per subject, overall accuracy, current and best daily streak, matches and wins.
-- **Leaderboards and badges:** global and CST campus rankings, emoji avatars, and five achievement badges.
+- **Campuses (colleges):** choose a college at sign-up or later from Profile. A campus is only granted to students whose email matches the college (e.g. `12345678.cst@rub.edu.bt` for CST). Leaderboard tabs: Global plus one per college.
+- **Badges and avatars:** emoji avatars and five achievement badges.
+- **Light, dark and system themes:** the app follows the phone's appearance by default, and Profile > Appearance lets users force Light or Dark (the choice is remembered).
 - **Admin API:** add, edit and delete questions (requires an admin account).
 
 ## Repository structure
@@ -27,7 +29,7 @@ quizpulse/
 │   ├── metro.config.js
 │   └── src/
 │       ├── config.js         SERVER_URL + Firebase web config (edit this)
-│       ├── firebase.js, api.js, socket.js, theme.js
+│       ├── firebase.js, api.js, socket.js, theme.js (light + dark palettes), ThemeContext.js
 │       ├── components/UI.js
 │       └── screens/          Auth, Home, Room, SinglePlayer, Stats, Leaderboard, Profile
 ├── server/                   Node.js backend
@@ -38,7 +40,7 @@ quizpulse/
 │   ├── Dockerfile, render.yaml
 │   └── package.json
 ├── firestore.rules           deny-all client rules (all data access goes through the server)
-├── firestore.indexes.json    index for the campus leaderboard
+├── firestore.indexes.json    (no composite indexes are currently needed)
 └── README.md
 ```
 
@@ -76,7 +78,7 @@ The app never reads or writes Firestore directly. It signs in with Firebase, the
 1. In the [Firebase console](https://console.firebase.google.com), create a project.
 2. **Authentication > Sign-in method:** enable **Email/Password**.
 3. **Firestore Database > Create database** (production mode).
-4. Publish the contents of `firestore.rules` in the Firestore *Rules* tab, and create the index described in `firestore.indexes.json` (or click the link Firestore shows the first time you open the campus leaderboard).
+4. Publish the contents of `firestore.rules` in the Firestore *Rules* tab. No composite indexes are needed.
 5. **Project settings > General > Your apps:** add a **Web app** and copy its config values.
 6. **Project settings > Service accounts > Generate new private key.** Save the file as `server/serviceAccountKey.json`. **Never commit this file.**
 
@@ -120,6 +122,21 @@ cd server
 npm run make-admin -- you@example.com
 ```
 Sign out and in again. That account now sees an **Admin > Manage questions** card on the Profile tab, where you can search and filter questions, add new ones, edit them (choose the correct answer with a tap) and delete them. Changes apply to the next match. The same operations are available as the REST routes `GET/POST/PUT/DELETE /api/admin/questions`.
+
+## Campuses (colleges)
+
+Colleges are defined in **one file**: `server/src/colleges.js`. To add a college, add one line:
+
+```js
+{ id: 'GCBS', name: 'Gedu College of Business Studies', emailTag: 'gcbs' },
+```
+
+Students of that college then use emails of the form `<student-id>.gcbs@rub.edu.bt`. The app reads the list from the server, so the register screen, the Profile campus picker and the leaderboard tabs update automatically. Check each college's real email format before adding it.
+
+- The server checks the email on every campus change; the app cannot bypass it.
+- `REQUIRE_VERIFIED_EMAIL=false` (default): the email format is enough, which is convenient for demos and testing.
+- `REQUIRE_VERIFIED_EMAIL=true`: the user must also verify the email (the app sends a verification link), so nobody can claim a campus with an address they don't own. Recommended for real use.
+- Users without a college email can still play; they simply have no campus and appear only on the Global leaderboard.
 
 ## Testing
 
@@ -171,7 +188,7 @@ Set `SERVER_URL` to the deployed **https** address first. Android release builds
 | App cannot reach the server | Server not running, wrong IP in `config.js`, different Wi-Fi network, or firewall blocking port 3000. Test `http://<your-ip>:3000/health` in the phone browser. |
 | Socket says `unauthorized` | The Firebase config in the app and the service-account key belong to different Firebase projects. |
 | Metro error about `react-native/asset-registry` | Remove the `unstable_enablePackageExports` line from `app/metro.config.js`. |
-| Campus leaderboard errors | Create the Firestore index (the error message contains a one-click link). |
+| Cannot join a campus | Your email must match the college, e.g. `12345678.cst@rub.edu.bt` for CST. Choose "None" to register without a campus. |
 | Admin routes return 403 | Sign out and back in after running `make-admin`. |
 
 ## Project information
